@@ -7,8 +7,8 @@ WORKDIR /server
 # Install pnpm globally
 RUN npm install pnpm -g
 
-# Copy package files and yarn config
-COPY package.json pnpm-lock.yaml* ./
+# Copy package files and pnpm config
+COPY package.json pnpm-lock.yaml* .npmrc ./
 
 # Install dependencies using pnpm
 RUN pnpm install --frozen-lockfile
