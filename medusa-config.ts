@@ -28,6 +28,7 @@ module.exports = defineConfig({
             "localhost",
             ".localhost",
             "127.0.0.1",
+            ".ngrok-free.app",
           ],
           hmr: {
             // HMR websocket port inside container
@@ -43,6 +44,25 @@ module.exports = defineConfig({
     {
       resolve: "@medusajs/medusa/translation",
     },
+    {
+      resolve: "@medusajs/medusa/payment",
+      options: {
+        providers: [
+          {
+            resolve: "./src/modules/toss",
+            id: "toss",
+            options: {
+              apiKey: process.env.TOSS_API_KEY,
+              retUrl: process.env.TOSS_RET_URL,
+              retCancelUrl: process.env.TOSS_RET_CANCEL_URL,
+              resultCallback: process.env.TOSS_RESULT_CALLBACK_URL,
+              autoExecute: true,
+              useMock: process.env.TOSS_USE_MOCK !== "false",
+            }
+          }
+        ]
+      }
+    }
   ],
   featureFlags: {
     translation: true,
