@@ -33,7 +33,7 @@ type TossOptions = {
   retCancelUrl?: string
   resultCallback?: string
   callbackVersion?: "V2"
-  autoExecute?: boolean
+  autoExecute?: false
   useMock?: boolean
 }
 
@@ -122,12 +122,58 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
     return json
   }
 
+  protected getStringValue(value: unknown): string | undefined {
+    if (typeof value !== "string") {
+      return undefined
+    }
+
+    const trimmed = value.trim()
+    return trimmed.length ? trimmed : undefined
+  }
+
+  protected buildUrlWithQuery(
+    baseUrl: string | undefined,
+    query: Record<string, string | undefined>
+  ): string | undefined {
+    if (!baseUrl) {
+      return baseUrl
+    }
+
+    const queryEntries = Object.entries(query).filter(
+      ([, value]) => typeof value === "string" && value.length > 0
+    ) as Array<[string, string]>
+
+    if (!queryEntries.length) {
+      return baseUrl
+    }
+
+    try {
+      const url = new URL(baseUrl)
+      queryEntries.forEach(([key, value]) => {
+        url.searchParams.set(key, value)
+      })
+      return url.toString()
+    } catch {
+      const params = new URLSearchParams(queryEntries)
+      const separator = baseUrl.includes("?") ? "&" : "?"
+      return `${baseUrl}${separator}${params.toString()}`
+    }
+  }
+
   async initiatePayment(
     input: InitiatePaymentInput
   ): Promise<InitiatePaymentOutput> {
     const orderNo = `medusa_${Date.now()}`
     const amount = Number(input.amount)
     const productDesc = `Medusa order ${orderNo}`
+    const context = (input.context ?? {}) as Record<string, unknown>
+    const data = (input.data ?? {}) as Record<string, unknown>
+    const sessionId =
+      this.getStringValue(data.session_id) ??
+      this.getStringValue(context.idempotency_key)
+    const resultCallback = this.buildUrlWithQuery(this.options_.resultCallback, {
+      sessionId,
+    })
 
     if (this.isMockMode) {
       return {
@@ -152,8 +198,8 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
       apiKey: this.options_.apiKey,
       retUrl: this.options_.retUrl,
       retCancelUrl: this.options_.retCancelUrl,
-      autoExecute: this.options_.autoExecute ?? true,
-      resultCallback: this.options_.resultCallback,
+      autoExecute: false,
+      resultCallback,
       callbackVersion: "V2",
     })
 
@@ -174,7 +220,6 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
     const status = this.mapTossStatusToMedusa(
       input.data?.status as string | undefined
     )
-
     if (status === "canceled") {
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
