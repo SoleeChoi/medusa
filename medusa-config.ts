@@ -56,7 +56,6 @@ module.exports = defineConfig({
               retUrl: process.env.TOSS_RET_URL,
               retCancelUrl: process.env.TOSS_RET_CANCEL_URL,
               resultCallback: process.env.TOSS_RESULT_CALLBACK_URL,
-              autoExecute: true,
               useMock: process.env.TOSS_USE_MOCK !== "false",
             }
           },
