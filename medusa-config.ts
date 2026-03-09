@@ -59,7 +59,14 @@ module.exports = defineConfig({
               autoExecute: true,
               useMock: process.env.TOSS_USE_MOCK !== "false",
             }
-          }
+          },
+          {
+            resolve: "@medusajs/medusa/payment-stripe",
+            id: "stripe",
+            options: {
+              apiKey: process.env.STRIPE_API_KEY,
+            },
+          },
         ]
       }
     }
