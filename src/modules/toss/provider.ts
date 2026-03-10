@@ -78,9 +78,9 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
   }
 
   protected mapTossStatusToMedusa(
-    status?: string
+    status?: unknown
   ): GetPaymentStatusOutput["status"] {
-    const normalized = (status ?? "").toUpperCase()
+    const normalized = String(status ?? "").toUpperCase()
     if (normalized.includes("COMPLETE") || normalized.includes("DONE")) {
       return "captured"
     }
@@ -217,9 +217,7 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
   async authorizePayment(
     input: AuthorizePaymentInput
   ): Promise<AuthorizePaymentOutput> {
-    const status = this.mapTossStatusToMedusa(
-      input.data?.status as string | undefined
-    )
+    const status = this.mapTossStatusToMedusa(input.data?.status)
     if (status === "canceled") {
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
@@ -227,10 +225,14 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
       )
     }
 
+    // Toss return/callback timing can cause status to remain pending
+    // even after a successful payment redirect in storefront.
+    // For Toss session completion flow, treat non-canceled states as authorized.
     return {
-      status: status === "captured" ? "authorized" : status,
+      status: "authorized",
       data: {
         ...(input.data ?? {}),
+        original_status: status,
         authorized_at: new Date().toISOString(),
       },
     }
@@ -268,7 +270,7 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
     input: GetPaymentStatusInput
   ): Promise<GetPaymentStatusOutput> {
     return {
-      status: this.mapTossStatusToMedusa(input.data?.status as string | undefined),
+      status: this.mapTossStatusToMedusa(input.data?.status),
     }
   }
 
