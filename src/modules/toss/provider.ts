@@ -140,6 +140,23 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
     return this.callTossApi("payments", payload, "create payment")
   }
 
+  protected async executeTossPayment(params: {
+    payToken: string
+    orderNo: string
+    amount?: number
+  }): Promise<TossApiResponse> {
+    return this.callTossApi(
+      "execute",
+      {
+        apiKey: this.options_.apiKey,
+        payToken: params.payToken,
+        orderNo: params.orderNo,
+        ...(params.amount !== undefined && { amount: params.amount }),
+      },
+      "execute payment"
+    )
+  }
+
   protected getStringValue(value: unknown): string | undefined {
     if (typeof value !== "string") {
       return undefined
