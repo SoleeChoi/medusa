@@ -1,5 +1,5 @@
 import type { MedusaRequest, MedusaResponse } from "@medusajs/framework/http"
-import { ContainerRegistrationKeys } from "@medusajs/framework/utils"
+import { ContainerRegistrationKeys, MedusaError } from "@medusajs/framework/utils"
 import { completeCartWorkflow } from "@medusajs/medusa/core-flows"
 
 const getString = (value: unknown): string | undefined => {
@@ -11,11 +11,18 @@ const getString = (value: unknown): string | undefined => {
   return trimmed.length ? trimmed : undefined
 }
 
+/**
+ * Toss resultCallback handler (backup mechanism).
+ *
+ * Primary flow: storefront calls POST /store/carts/{id}/complete
+ * which triggers authorizePayment → Toss execute API.
+ *
+ * This endpoint handles cases where the storefront flow didn't
+ * complete (e.g., user closed popup before postMessage).
+ */
 export async function POST(req: MedusaRequest, res: MedusaResponse) {
   const query = (req.query ?? {}) as Record<string, unknown>
   const body = (req.body ?? {}) as Record<string, unknown>
-  console.log('query', query)
-  console.log('body', body)
   /** 
    * body example
     {
@@ -35,11 +42,20 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   if (!sessionId) {
     return res.status(400).json({
       ok: false,
-      message: "Missing session_id in callback request.",
+      message: "Missing sessionId in callback request.",
+    })
+  }
+
+  const status = getString(body.status)
+  if (status !== "PAY_APPROVED") {
+    return res.status(200).json({
+      ok: true,
+      message: `Ignored callback with status=${status}. Only PAY_APPROVED triggers order completion.`,
     })
   }
 
   const queryService = req.scope.resolve(ContainerRegistrationKeys.QUERY)
+
   const { data: sessions } = await queryService.graph({
     entity: "payment_session",
     fields: ["id", "payment_collection_id"],
@@ -52,7 +68,7 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
   if (!paymentCollectionId) {
     return res.status(404).json({
       ok: false,
-      message: `No payment_session found for session_id=${sessionId}.`,
+      message: `No payment_session found for sessionId=${sessionId}.`,
     })
   }
 
@@ -70,14 +86,22 @@ export async function POST(req: MedusaRequest, res: MedusaResponse) {
     })
   }
 
-  const { result } = await completeCartWorkflow(req.scope).run({
-    input: { id: cartId },
-  })
+  try {
+    const { result } = await completeCartWorkflow(req.scope).run({
+      input: { id: cartId },
+    })
 
-  return res.status(200).json({
-    ok: true,
-    session_id: sessionId,
-    cart_id: cartId,
-    order_id: result?.id ?? null,
-  })
+    return res.status(200).json({
+      ok: true,
+      session_id: sessionId,
+      cart_id: cartId,
+      order_id: result?.id ?? null,
+    })
+  } catch (error) {
+    const message = error instanceof MedusaError ? error.message : String(error)
+    return res.status(422).json({
+      ok: false,
+      message: `Failed to complete cart: ${message}`,
+    })
+  }
 }
