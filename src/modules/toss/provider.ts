@@ -41,7 +41,7 @@ type InjectedDependencies = {
   logger: Logger
 }
 
-type TossCreatePaymentResponse = {
+type TossApiResponse = {
   payToken?: string
   checkoutPage?: string
   status?: string
@@ -49,6 +49,13 @@ type TossCreatePaymentResponse = {
   errorCode?: string
   msg?: string
   message?: string
+  orderNo?: string
+  amount?: number
+  approvalTime?: string
+  transactionId?: string
+  payMethod?: string
+  paidAmount?: number
+  discountedAmount?: number
   [key: string]: unknown
 }
 
@@ -93,15 +100,17 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
     return "pending"
   }
 
-  protected async createTossPayment(
-    payload: Record<string, unknown>
-  ): Promise<TossCreatePaymentResponse> {
-    const response = await fetch("https://pay.toss.im/api/v2/payments", {
+  protected async callTossApi(
+    endpoint: string,
+    payload: Record<string, unknown>,
+    operationName: string
+  ): Promise<TossApiResponse> {
+    const response = await fetch(`https://pay.toss.im/api/v2/${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     })
-    const json = (await response.json()) as TossCreatePaymentResponse
+    const json = (await response.json()) as TossApiResponse
     const tossCode = Number(json.code)
     const isBusinessError =
       json.code !== undefined && (!Number.isFinite(tossCode) || tossCode !== 0)
@@ -113,13 +122,22 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
           ? `code=${String(json.code)}`
           : `http_status=${response.status}`
       const errorCodeLabel = json.errorCode ? `, error_code=${json.errorCode}` : ""
+      this.logger_.error(
+        `Toss ${operationName} failed (${codeLabel}${errorCodeLabel}): ${tossMessage}`
+      )
       throw new MedusaError(
         MedusaError.Types.UNEXPECTED_STATE,
-        `Toss create payment failed (${codeLabel}${errorCodeLabel}): ${tossMessage}`
+        `Toss ${operationName} failed (${codeLabel}${errorCodeLabel}): ${tossMessage}`
       )
     }
 
     return json
+  }
+
+  protected async createTossPayment(
+    payload: Record<string, unknown>
+  ): Promise<TossApiResponse> {
+    return this.callTossApi("payments", payload, "create payment")
   }
 
   protected getStringValue(value: unknown): string | undefined {
