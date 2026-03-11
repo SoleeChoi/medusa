@@ -252,22 +252,32 @@ class TossService extends AbstractPaymentProvider<TossOptions> {
   async authorizePayment(
     input: AuthorizePaymentInput
   ): Promise<AuthorizePaymentOutput> {
-    const status = this.mapTossStatusToMedusa(input.data?.status)
-    if (status === "canceled") {
+    const data = input.data ?? {}
+    const payToken = this.getStringValue(data.payToken)
+    const orderNo = this.getStringValue(data.orderNo)
+
+    if (this.isMockMode) {
+      return {
+        status: "authorized",
+        data: { ...data, status: "PAY_COMPLETE", authorized_at: new Date().toISOString() },
+      }
+    }
+
+    if (!payToken || !orderNo) {
       throw new MedusaError(
         MedusaError.Types.PAYMENT_AUTHORIZATION_ERROR,
-        "Toss payment is canceled or failed."
+        `Missing payToken or orderNo for Toss execute (payToken=${payToken}, orderNo=${orderNo})`
       )
     }
 
-    // Toss return/callback timing can cause status to remain pending
-    // even after a successful payment redirect in storefront.
-    // For Toss session completion flow, treat non-canceled states as authorized.
+    const amount = typeof data.amount === "number" ? data.amount : undefined
+    const executeResult = await this.executeTossPayment({ payToken, orderNo, amount })
+
     return {
       status: "authorized",
       data: {
-        ...(input.data ?? {}),
-        original_status: status,
+        ...data,
+        ...executeResult,
         authorized_at: new Date().toISOString(),
       },
     }
